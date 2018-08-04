@@ -11,15 +11,15 @@ from sklearn.cross_validation import StratifiedKFold
 import time as time
 
 class NeighborsVarSelector(object):
-    # parametre konstruktora:
-    # lambda_const - konstanta lambda pred regularizacnym clenom
-    # eta - nezaporne realne cislo, ktore nasobi gradient
-    # batch_size - pocet nahodne vyberanych vzoriek pre SGD
-    # n_iters - pocet iteracii algoritmu
-    # metric - definicia vzdialenosti
-    # error_type - miera chyby
-    # eps - pre test na zastavenie
-    # prec - presnost pri rieseni zaokruhlovacich chyb
+    # parameters of constructor:
+    # lambda_const - constant before regularization term
+    # eta - learning rate (step rate)
+    # batch_size - number of randomly selected instances in case of SGD (if batch_size > 0)
+    # n_iters - number of iterations
+    # metric - distance metric
+    # error_type - type of loss function, e. g. MSE, MAE, Mean Huber Loss or Cross Entropy
+    # eps - stopping condition, min. norm. of gradient
+    # prec - precision of rounding
     def __init__(self, lambda_const, eta, batch_size, n_iters, metric, p=None,
                  dist_weights='exp', error_type='mse', delta=0.1, eps=0.0001, prec=1e-10, 
                  c=1,check_neg_var_weights='zero', normalize_grad=False, stratified_SGD=False):
@@ -30,46 +30,46 @@ class NeighborsVarSelector(object):
         self.eps = eps
         self.prec = prec
         
-        # priznak pre optimalizaciu cez vektorovy vypocet
+        # vectrorized computation flag
         self.vector_computation = True
         
-        # regularizacia L1 alebo L0
+        # regularization method - L1 or L0
         self.reg_method = 'L0'
         
-        # priznak, ci sa ma SGD vykonavat so stratifikovanym vyberom
+        # use of stratified sampling SGD 
         self.stratified_SGD = stratified_SGD
         
-        # minimalna pripustna suma vazenych vzdialenosti susedov
+        # minimal allowable weight sum of neighbors
         self.min_weight_sum = 1e-16
 
-        # konstanta pre vzdialenost
+        # distance constant
         self.c = c 
         
-        # mocnina - pouzite iba pri vseobecnej 'minkowski' metrike
+        # power of minkowskian metric
         self.p = p
         
-        # delta - pouzite iba pri Huberovaj funkcii na vypocet chyby
+        # delta - used only with Huber loss function 
         self.delta = delta
         
-        # vektor vah vysvetlujucich premennych
+        # vector of variable weights
         self.var_weights = None
-        # distancna matica
+        # distance matrix
         self.distance_matrix = None
-        # vazena distancna matica
+        # similarity matrix - weighted distance matrix, same shape as distance matrix
         self.wdistance_matrix = None
-        # vektor predikcii
+        # prediction vector
         self.predictions = None
-        # vektor sum vah susedov pre jednotlive pozorovania
+        # weight sums of neighbors for samples
         self.weight_sums = None
-        # boolovsky priznak debug - umoznuje potlacit, resp zobrazit debugovacie vypisy 
+        # flag for enabling/disabling debug information 
         self.debug = False
-        # boolovsky priznak pre podrobnejsi vypis
+        # flag for enabling/disabling detailed debug information 
         self.detail = False
-        # retazcova premenna, ktora urcuje sposob korekcie vah
+        # type of variable weight correction
         self.check_neg_var_weights = check_neg_var_weights
-        # boolovsky priznak, ktory urcuje, ci sa ma normalizovat gradient
+        # flag for gradient normalization
         self.normalize_grad = normalize_grad
-        # definicia vzdialenosti a hodnotiaca funkcia vzdialenosti
+        # metric and distance evaluation function
         if dist_weights == 'exp': 
             self.dist_weight_function = self.dist_weights_exp
             if metric == 'euclidean':
@@ -279,7 +279,7 @@ class NeighborsVarSelector(object):
         self.metric = metric
         self.dist_weights = dist_weights
         
-        # miera chyby
+        # type of cost function
         if error_type == 'mae':
             self.error_function = self.compute_mae
             self.dcost_dvl = self.dmae_dvl
@@ -296,16 +296,14 @@ class NeighborsVarSelector(object):
             raise ValueError('Invalid error type.')
         self.error_type = error_type
         
-        # indexy pre foldy
+        # sample indices for folds
         self.fold_indices = None
-        # cislo aktualneho foldu
+        # current fold number
         self.current_fold = 0
-        # inicializacia nahodneho generatora
+        # initialization of random generator
         self.random_state = 1
     
-    # metoda na inicializaciu vah vysvetlujucich premennych
-    # na konkretne vahy,
-    # resp. na vahy 1/m (default)
+    # initialization of variable weights, 1/num_features by default	
     def init_var_weights(self, xcols, var_weights=None):
         if var_weights is None:
             m_features = len(xcols)
@@ -313,18 +311,18 @@ class NeighborsVarSelector(object):
         else:
             self.var_weights = np.array(var_weights)
      
-    # nahodny vyber podmnoziny pozorovani velkosti batch_size
-    # ak je batch_size > 0, nahodne sa vyberie batch_size pozorovani
-    # inak cely dataset
-    # v stochastic rezime sa pozorovania vyberaju tak, 
-    # aby boli rozvrstvene rovnomerne podla hodnoty cielovej premennej
+    # random selection of subsample
+    # if batch_size > 0, it is number of randomly selected samples (SGD)
+    # otherwise whole dataset is taken
+    # two variants of SGD implemented
+    # stratified SGD and standard SGD	
     def choose_subsample(self, X, y, y_class):
         # ak nerobime SGD, vratime vsetky pozorovania 
         if self.batch_size == 0:
             return X, y, list(range(len(X)))
         
         if self.fold_indices is None or self.current_fold >= len(self.fold_indices):
-            # vyrobime stratifikovane foldy na vyber pozorovani
+            # we make stratified folds for sample selection
             folds = int(len(X)/self.batch_size)
             self.fold_indices = []
             
@@ -349,52 +347,52 @@ class NeighborsVarSelector(object):
         X_sample, y_sample = X[indices,:], y[indices]
         return X_sample, y_sample, indices
     
-    # hodnotiaca funkcia vzdialenosti e^-c.d
+    # distance evaluation function e^-c.d
     def dist_weights_exp(self, distance_matrix):
         return math.e ** (-self.c * distance_matrix)
  
-    # hodnotiaca funkcia vzdialenosti e^(-d^c)
+    # distance evaluation function e^(-d^c)
     def dist_weights_expp(self, distance_matrix):
         return math.e ** (-(distance_matrix**self.c))
 
-    # hodnotiaca funkcia vzdialenosti c^-d
+    # distance evaluation function c^-d
     def dist_weights_ax(self, distance_matrix):
         return self.c ** (-distance_matrix)
     
-    # hodnotiaca funkcia vzdialenosti 1/1+d
+    # distance evaluation function 1/1+d
     def dist_weights_inv(self, distance_matrix):
         return 1/(1+self.c*distance_matrix)
     
-    # hodnotiaca funkcia 1/(1+d)^c
+    # distance evaluation function 1/(1+d)^c
     def dist_weights_invc(self, distance_matrix):
         return 1/((1+distance_matrix)**self.c)
     
-    # hodnotiaca funkcie vzdialenosti 1/1+d^c
+    # distance evaluation function 1/1+d^c
     def dist_weights_invp(self, distance_matrix):
         return 1/(1+distance_matrix**self.c)
 
-    # hodnotiaca funkcia vzdialenosti 1/1+ln(1+d)
+    # distance evaluation function 1/1+ln(1+d)
     def dist_weights_loginv(self, distance_matrix):
         return 1/(1+np.log(1 + self.c * distance_matrix))
     
-    # hodnotiaca funkcia vzdialenosti e^(-(d^2)/2)
+    # distance evaluation function e^(-(d^2)/2)
     def dist_weights_gauss(self, distance_matrix):
         return math.e ** (-(distance_matrix**2)/2)
     
-    # hodnotiaca funkcia kosinusovy kernel
+    # distance evaluation function cosine kernel
     def dist_weights_cosine(self, distance_matrix):
         return np.cos((math.pi/2) * distance_matrix)  
     
-    # hodnotiaca funkcia Epanechnikov kernel
+    # distance evaluation function Epanechnikov kernel
     def dist_weights_epan(self, distance_matrix):
         return 1 - (distance_matrix**2)
 
-    # hodnotiaca funkcia tricubic kernel
+    # distance evaluation function tricubic kernel
     def dist_weights_tricubic(self, distance_matrix):
         return (1-(distance_matrix)**3)**3
 
-    # metoda na vypocet distancnej matice a vektora sum vah susedov 
-    # pre jednotlive pozorovania
+    # computing of distance matrix, weighted distance matrix 
+    # and weight sums for samples	
     def compute_distances(self, X_subsample, X, indices):
         if self.metric == 'cityblock':
             real_weights = self.var_weights
@@ -425,56 +423,55 @@ class NeighborsVarSelector(object):
             real_metric = 'minkowski'
             real_p = self.p
             
-        # vypocitame Hadamardov sucin
+        # computing Hadamard (Schur) product
         X_sub_h = np.multiply(X_subsample, real_weights)
         X_h = np.multiply(X, real_weights)
-        # vypocet distancnej matice pre nahodne vybrane pozorovania
-        # voci vsetkym
+	# computing of rectangular distance matrix 
+	# with distances of selected samples vs. all
         dist_mat = cdist(X_sub_h, X_h, metric=real_metric, p=real_p)
-        # odlozime si povodnu distancnu maticu - pre niektore funkcie je potrebna
         
-        # niektore hodnotiace funkcie potrebuju d e <0,1>
+        # cosine, Epanechnikov and tricubic kernel need d e <0,1>
         if self.normalize_dists:
             max_distance = dist_mat.max()
             dist_mat = dist_mat/max_distance
         
+	# store original distance matrix - needed for certain computations
         self.distance_matrix = dist_mat
             
-        # aplikacia hodnotiacej funkcie vzdialenosti 
-        # na distancnu maticu
+        # we apply distance evaluation function to distance matrix 
         dist_mat = self.dist_weight_function(dist_mat)
 
-        # na diagonalu vlozime nuly, lebo vzdy uvazujeme len susedov okrem daneho pozorovania
+        # we zeroize diagonal of weighted distance matrix
         dist_mat[list(range(len(dist_mat))),indices] = 0
                 
-        # vypocet sum vah susedov pre jednotlive pozorovania
+        # we sum weighted distances of neighbors for sample
         self.weight_sums = np.sum(dist_mat, axis = 1) 
         self.wdistance_matrix = dist_mat
     
-    # naplnenie vektora predikcii
-    # predikcia hodnoty cielovej premennej pre kazdy bod datasetu 
-    # vypocita sa ako vazeny aritmeticky priemer 
-    # hodnot cielovej premennej pre ostatne pozorovania        
+    # computing prediction vector
+    # predicted value of target for i-th sample 
+    # is defined as weighted average 
+    # of target's values for all other samples	
     def predict(self, indices, y):
         wdists = self.wdistance_matrix 
         wy = np.multiply(wdists, y)
         wy_sums = np.sum(wy, axis=1) 
         self.predictions = wy_sums/self.weight_sums
         
-    # vypocet chyby - MAE (priemer absolutnych hodnot chyb jednotlivych pozorovani)
+    # computing MAE
     def compute_mae(self, y):
         errs = y - self.predictions
         return np.abs(errs).mean() #+ self.lambda_const *((sum(weights)-1)**2)            
     
-    # vypocet chyby - MSE (priemer stvorcov chyb jednotlivych pozorovani)
+    # computing MSE
     def compute_mse(self, y):
         errs = y - self.predictions
         return (errs**2).mean() #+ self.lambda_const *((sum(weights)-1)**2)
         
-    # vypocet chyby - cross entropy
+    # computing cross entropy for binary classification tasks
     def compute_cre(self, y):
         y_pred = self.predictions
-        # zakladna verzia, nepouziva sa kvoli problemom pri vypocte logaritmu malych cisel
+        # basic version isn't used because of problems with logarithms
         #return -(y * np.log(y_pred) + (1-y) * np.log(1-y_pred)).mean()'''        
         errs = np.zeros(shape=len(y))
         for i in range(len(y)):
@@ -487,7 +484,7 @@ class NeighborsVarSelector(object):
                 raise ValueError()
         return -errs.mean()
         
-    # vypocet chyby - Huberova funkcia (priemer)
+    # computing mean Huber loss
     def compute_huber(self, y):
         diffs = y - self.predictions
         errs = np.zeros(shape=len(y))
@@ -501,9 +498,9 @@ class NeighborsVarSelector(object):
                 errs[i] = 0.5*(diffs[i]**2)
         return errs.mean()    
 
-    # derivacia predikovanej hodnoty podla vahy vysvetlujucej premennej v[l]
-    # pre euklidovsku vzdialenost
-    # pre hodnotiacu funkciu e^-c*d    
+    # prime derivative of prediction according to variable weight v[l]
+    # for euclidean distance
+    # for distance evaluation function e^-c*d    
     def dpi_dvl_euclid_exp(self, indices, X, y, i, l):
         prediction = self.predictions[i]
         idx = indices[i]
@@ -519,10 +516,9 @@ class NeighborsVarSelector(object):
             sum_wxp += wxp
         return (self.c * self.var_weights[l] * sum_wxp/sum_w)
 
-        
-    # derivacia predikovanej hodnoty podla vahy vysvetlujucej premennej v[l]
-    # pre stvorec euklidovskej vzdialenosti
-    # pre hodnotiacu funkciu e^-c*d    
+    # prime derivative of prediction according to variable weight v[l]
+    # for squared euclidean distance
+    # for distance evaluation function e^-c*d
     def dpi_dvl_sqe_exp(self, indices, X, y, i, l):
         prediction = self.predictions[i]
         idx = indices[i]
@@ -537,10 +533,10 @@ class NeighborsVarSelector(object):
             sum_wxp += wxp
         return 2 * self.c * self.var_weights[l] * sum_wxp/sum_w
     
-    # derivacia predikovanej hodnoty podla vahy vysvetlujucej premennej v[l]
-    # pre euklidovsku vzdialenost
-    # modifikacia - vazene druhou odmocninou absolutnej hodnoty vah premennych
-    # pre hodnotiacu funkciu e^-c*d    
+    # prime derivative of prediction according to variable weight v[l]
+    # for squared euclidean distance
+    # for distance evaluation function e^-c*d 
+    # modification - weighted by square root of variable weight
     def dpi_dvl_euclidmod_exp(self, indices, X, y, i, l):
         prediction = self.predictions[i]
         idx = indices[i]
@@ -557,9 +553,9 @@ class NeighborsVarSelector(object):
             sum_wxp += wxp
         return self.c * sum_wxp/sum_w
     
-    # derivacia predikovanej hodnoty podla vahy vysvetlujucej premennej v[l]
-    # pre Minkowskeho vzdialenost
-    # pre hodnotiacu funkciu e^-c*d    
+    # prime derivative of prediction according to variable weight v[l]
+    # for Minkowskian distance
+    # for distance evaluation function e^-c*d 
     def dpi_dvl_min_exp(self, indices, X, y, i, l):
         prediction = self.predictions[i]
         idx = indices[i]
@@ -592,10 +588,10 @@ class NeighborsVarSelector(object):
                 sum_wxp += wxp
         return self.c * sum_wxp/sum_w * (self.var_weights[l]**(self.p-1))
     
-    # derivacia predikovanej hodnoty podla vahy vysvetlujucej premennej v[l]
-    # pre Minkowskeho vzdialenost
-    # modifikacia - vazene druhou odmocninou absolutnej hodnoty vah premennych
-    # pre hodnotiacu funkciu e^-c*d    
+    # prime derivative of prediction according to variable weight v[l]
+    # for Minkowskian distance
+    # for distance evaluation function e^-c*d
+    # modification - weighted by square root of variable weight
     def dpi_dvl_minmod_exp(self, indices, X, y, i, l):
         prediction = self.predictions[i]
         idx = indices[i]
@@ -629,10 +625,10 @@ class NeighborsVarSelector(object):
         return self.c * sum_wxp/sum_w
     
 
-    # derivacia predikovanej hodnoty podla vahy vysvetlujucej premennej v[l]
-    # pre stvorec euklidovskej vzdialenosti
-    # modifikacia - vazene druhou odmocninou absolutnej hodnoty vah premennych
-    # pre hodnotiacu funkciu e^-c*d    
+    # prime derivative of prediction according to variable weight v[l]
+    # for squared euclidean distance
+    # for distance evaluation function e^-c*d
+    # modification - weighted by square root of variable weight
     def dpi_dvl_sqemod_exp(self, indices, X, y, i, l):
         prediction = self.predictions[i]
         idx = indices[i]
@@ -660,9 +656,9 @@ class NeighborsVarSelector(object):
                 sum_wxp += wxp
         return self.c * sum_wxp/sum_w
 
-    # derivacia predikovanej hodnoty podla vahy vysvetlujucej premennej v[l]
-    # pre manhattansku vzdialenost
-    # pre hodnotiacu funkciu e^-c*d    
+    # prime derivative of prediction according to variable weight v[l]
+    # for Manhattan distance
+    # for distance evaluation function e^-c*d
     def dpi_dvl_city_exp(self, indices, X, y, i, l):
         prediction = self.predictions[i]
         idx = indices[i]
@@ -2053,7 +2049,7 @@ class NeighborsVarSelector(object):
             sum_wxp += wxp
         return sum_wxp/sum_w
     
-    # derivacia regularizacie
+    # prime derivative of regularization term
     def dreg_dvl(self, l):
         vl = self.var_weights[l]        
         if self.reg_method == 'L1':
@@ -2061,7 +2057,7 @@ class NeighborsVarSelector(object):
         elif self.reg_method == 'L0':
             return 2 * (1e+2/((1+math.e**(-1e+2 * vl))**2))*(math.e**(-1e+2 * vl))
                 
-    # derivacia ucelovej funkcie (MAE + lambda * regularizacia) podla vahy vysvetlujucej premennej v[l]
+    # prime derivatve of MAE with regularization according to variable weight v[l]
     def dmae_dvl(self, indices, X, y, l):
         n_samples = len(indices)
         sum_dpi = 0
@@ -2072,7 +2068,7 @@ class NeighborsVarSelector(object):
         dreg_dvl = self.dreg_dvl(l)
         return -sum_dpi/n_samples + self.lambda_const * dreg_dvl 
 
-    # derivacia ucelovej funkcie (MSE + lambda * regularizacia) podla vahy vysvetlujucej premennej v[l]
+    # prime derivatve of MSE with regularization according to variable weight v[l]
     def dmse_dvl(self, indices, X, y, l):
         n_samples = len(indices)
         sum_dpi = 0
@@ -2085,7 +2081,7 @@ class NeighborsVarSelector(object):
         dreg_dvl = self.dreg_dvl(l)
         return sum_dpi/n_samples + self.lambda_const * dreg_dvl 
     
-    # derivacia ucelovej funkcie (Huber + lambda * regularizacia) podla vahy vysvetlujucej premennej v[l]
+    # prime derivatve of HLF with regularization according to variable weight v[l]
     def dhuber_dvl(self, indices, X, y, l):
         n_samples = len(indices)
         sum_dpi = 0
@@ -2101,7 +2097,7 @@ class NeighborsVarSelector(object):
         dreg_dvl = self.dreg_dvl(l)
         return sum_dpi/n_samples + self.lambda_const * dreg_dvl 
     
-    # derivacia ucelovej funkcie (cross entropy + lambda * regularizacia) podla vahy vysvetlujucej premennej v[l]
+    # prime derivatve of Cross Entropy with regularization according to variable weight v[l]
     def dcre_dvl(self, indices, X, y, l):
         y_pred = self.predictions
         n_samples = len(indices)
@@ -2116,11 +2112,8 @@ class NeighborsVarSelector(object):
             
         dreg_dvl = self.dreg_dvl(l)
         return -sum_dpi/n_samples + self.lambda_const * dreg_dvl 
-    
-        
-    # pomocna metoda na upravu vah na nezaporne hodnoty
-    # najdeme zapornu vahu s najvacsou absolutnou hodnotou a jej index
-    # podla toho vypocitame nove eta ako podiel tejto vahy a prislusnej zlozky gradientu
+            
+    # handling negative variable weights	
     def correct_var_weights(self, old_var_weights, gradient_vector):
         min_weight = self.var_weights.min()
         min_weight_index = 0
@@ -2128,17 +2121,17 @@ class NeighborsVarSelector(object):
             return
         
         use_new_eta = False
-        # 1. moznost - zaporne vahy jednoducho vynulujeme
+        # 1st option - we set all negative variable weights to zero
         if self.check_neg_var_weights == 'zero':
             tmp_var_weights = np.maximum(self.var_weights,np.zeros(shape=len(self.var_weights)))                                    
             if tmp_var_weights.max() == 0:
                 use_new_eta = True
             else:
                 self.var_weights = tmp_var_weights
-        # 2. moznost - zaporne vahy dame do absolutnych hodnot                                
+        # 2nd option - we replace all negative variable weights by their absolute values                                
         elif self.check_neg_var_weights == 'abs':
             self.var_weights = abs(self.var_weights)
-        # 3. moznost - prepocitame eta    
+        # 3rd option - we compute new eta   
         if self.check_neg_var_weights == 'new_eta' or use_new_eta:
            new_eta = self.eta
            for idx in range(len(self.var_weights)):
@@ -2163,13 +2156,12 @@ class NeighborsVarSelector(object):
             self.f.write('\nOriginal gradient:' + str(gradient_vector[min_weight_index]))
             self.f.write('\nNew min. weight:' + str(min_weight_check))
 
-    # aktualizacia vah vysvetlujucich premennych
-    # vypocet novych vah zo starych podla vzorca 
-    # nova vaha = stara vaha - eta * gradient
+    # updating variable weights 
+    # using formula new weights = old weights - eta * gradient	  
     def update_var_weights(self, t, gradient_vector):   
         self.var_weights = self.var_weights - gradient_vector * self.eta        
 
-    # pomocna metoda na vypis parametrov na zaciatok suboru            
+    # writing parameters to output file            
     def print_params(self):
         f = self.f
         m = self.metric
@@ -2204,11 +2196,10 @@ class NeighborsVarSelector(object):
             flag = 'disabled'
         f.write('\nNegative weight checking: ' + flag)
 
-    # samotna metoda pre vyber premennych
+    # feature selection algorithm
     def select_vars(self, X, y, xcols, maxvars=None, init_var_weights=None):
  
-		# krok 1 - standardizacia - data su uz standardizovane inym programom
-		# krok 2 - nastavenie uvodnych vah
+	# step 1 - variable weight initialization	
         m_features = len(xcols)
         self.init_var_weights(xcols, init_var_weights)
         
@@ -2218,11 +2209,11 @@ class NeighborsVarSelector(object):
             f.write('\nDataset size: ' + str(len(X)) + ' samples')
             f.write('\nDataset dimensionality: ' + str(m_features) + ' features')
 
-        # najlepsia chyba
+        # optimal error
         opt_error = None
         
-        # vypocitame triedy pre pozorovania podla percentilu
-        # pouziva sa pre vytvorenie stratifikovanych vzoriek
+	# we assign samples to groups according to percentile
+	# when creating stratified subsample 
         if len(np.unique(y)) > 10:
             p = np.arange(1,10) * 10
             bins = np.percentile(y,p)
@@ -2230,7 +2221,7 @@ class NeighborsVarSelector(object):
         else:
             y_class = y
         
-        # krok 3 - hlavna slucka
+        # step 2 - iteration loop
         for t in range(1,self.n_iters+1):
             if self.debug:
                 start_time = time.time()
@@ -2240,11 +2231,11 @@ class NeighborsVarSelector(object):
                 sum_vk = abs(self.var_weights).sum()                
                 f.write('\nSum |vk|:' + str(sum_vk))
               
-            # krok 3a - nahodny vyber pozorovani
+            # step 2a - random choice of dataset samples
             X_sample, y_sample, indices = self.choose_subsample(X,y,y_class)
                         
-            # krok 3b - vypocet matice vzdialenosti
-            # krok 3c - vypocet matice ohodnotenych vzdialenosti
+            # step 2b - computing distance matrix
+            # step 2c - computing similarity matrix or weighted distance matrix
             self.compute_distances(X_sample, X, indices)
             min_sum = self.weight_sums.min() 
             if min_sum < self.min_weight_sum:
@@ -2258,12 +2249,12 @@ class NeighborsVarSelector(object):
                 self.f.write('\nMin. weight sum:' + str(min_sum))                
                 end_time = time.time()
 
-			# krok 3d - vypocet vektora predikcii
+	    # step 2d - prediction of target variable value for all batch samples
             self.predict(indices, y)
             if self.debug:
                 end_time = time.time()
 
-            # krok 3e - vypocet hodnoty priemernej chyby
+            # step 2e - computing mean error
             new_error = self.error_function(y_sample)
             if opt_error == None or new_error < opt_error:
                 opt_error = new_error
@@ -2280,7 +2271,7 @@ class NeighborsVarSelector(object):
                 print('Error:' + str(new_error) + ' Cost function: ' + str(cost))
                 end_time = time.time()
             
-            # krok 3f - vypocet gradientu
+            # step 2f - computing gradient - partial derivatives vector of cost function
             if self.vector_computation:
                 var_nrs = list(range(m_features))
                 gradient_vector = self.dcost_dvl(indices, X, y, var_nrs)
@@ -2298,32 +2289,32 @@ class NeighborsVarSelector(object):
             if self.debug:
                 end_time = time.time()
                 
-            # krok 3g - normalizacia gradientu - volitelne
+            # step 2g -  gradient normalization - optional
             norm_gradient = abs(gradient_vector).sum()            
             if self.normalize_grad:
                 gradient_vector = gradient_vector/norm_gradient                
             if self.debug:
                 f.write('\nGradient:' + str(gradient_vector.tolist()))
             
-            # krok 3h - aktualizacia vah
+            # step 2h - updating variable weights
             tmp_var_weights = self.var_weights
             self.update_var_weights(t, gradient_vector)
 			
-            # krok 3i - zistovanie pritomnosti zapornej vahy premennej
+            # step 3i - handling negative variable weights
             if self.check_neg_var_weights != None:
                 self.correct_var_weights(tmp_var_weights, gradient_vector)
                 
             if self.debug:
                 print('Min. var. weight:', self.var_weights.min())
 
-            # stop test - ak norma gradientu je mensia ako epsilon, skoncime
+            # stop test - if gradient norm is too small, then break
             if norm_gradient < self.eps:
                 if self.debug:
                     f.write('\nStopped by stopping condition (gradient) at iteration:' + str(t))
                     print('\nStopped by stopping condition (gradient) at iteration:' + str(t))
                 break
             
-            # vypisanie zoznamu prvych 100 premennych po kazdych 100 iteraciach
+            # list of first 100 variables after every 100 iterations
             if self.debug and self.detail:
                 if t % 100 == 0:
                     var_list = zip(xcols,tmp_var_weights)
@@ -2340,7 +2331,8 @@ class NeighborsVarSelector(object):
                 
         w_list = zip(xcols,range(len(xcols)),tmp_var_weights)
         w_list = sorted(w_list,key=lambda w_list: w_list[2],reverse=True)
-        # na konci vypiseme do suboru finalne vybrane premenne s ich vahami                
+        # we write variable list with weights sorted by weight descending
+	# at the end of output file
         if self.debug:
             f.write('\n\nFinal error:  ' + str(new_error))
             f.write('\n\nFinal variable weights:')
@@ -2351,10 +2343,10 @@ class NeighborsVarSelector(object):
         res_colnames = [v[0] for v in w_list] 
         res_colnrs = [v[1] for v in w_list]
         res_weights = [w[2] for w in w_list]
-        # vratime zoznam premennych zoradeny podla vah a prislusne ich finalne vahy        
+        # outputs are list of selected variables (names and corresponding column numbers), weights and final error        
         return res_colnames, res_colnrs, res_weights, new_error
     
-    # pomocna metoda - otvorenie suboru pre logovanie so specialnym nazvom
+    # open logfile with special name
     def open_output_file(self, output_folder, input_folder, X_file, y_file):
         filename = X_file + '_l' + str(self.lambda_const) + '_e' + str(self.eta) +'_it' + str(self.n_iters) 
         filename += '_' + self.error_type + '_' + self.metric + '_' + self.dist_weights + '_' 
