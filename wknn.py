@@ -2,7 +2,7 @@
 
 """
 
-P. Bugata, P. Drotar, Weighted nearest neighbors feature selection,
+P. Bugata, P. Drotár, Weighted nearest neighbors feature selection,
 Knowledge-Based Systems (2018), doi:https://doi.org/10.1016/j.knosys.2018.10.004
 
 """
