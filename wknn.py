@@ -279,7 +279,10 @@ class WkNNFeatureSelector(TransformerMixin):
         elif self.error_type_ == 'ce':
             # log(1 - abs(y - y_pred))
             err_clipped = tf.maximum(1 - tf.abs(tf.subtract(y, y_pred)), self.epsilon_)
-            losses = -tf.log(err_clipped)        
+            if self.classification:
+                losses = -tf.multiply(y, tf.log(err_clipped))
+            else:
+                losses = -tf.log(err_clipped)
 
         # if y is one hot encoded, error is sum over all classes
         if self.classification:
