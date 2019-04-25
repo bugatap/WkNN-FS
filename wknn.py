@@ -488,10 +488,10 @@ class WkNNFeatureSelector(TransformerMixin):
         # create tensorflow graph
         data_type = self.data_type_
 		
-	# conversion of y to numpy
+        # conversion of y to numpy
         y = np.array(y)
 		
-	# if y is 1D, reshape to column
+        # if y is 1D, reshape to column
         if y.ndim == 1:
             y = y.reshape(-1,1)
         
