@@ -21,7 +21,7 @@ class WkNNFeatureSelector(TransformerMixin):
                  error_type = 'mse', delta = 1.0, 
                  lambda0 = 0.001, lambda1 = 0.001, lambda2 = 0.001, alpha = 100,
                  optimizer = 'SGD', learning_rate = 0.1, 
-                 normalize_gradient = True, data_type = 'float32', scaling=True,
+                 normalize_gradient = True, data_type = 'float32', scaling = True,
                  apply_weights = False, n_iters_weights = 300                                 
         ):
         # this class implements TransformerMixin interface
@@ -443,9 +443,9 @@ class WkNNFeatureSelector(TransformerMixin):
             return i + 1, next_sequencer
         
         init_err = var_err.assign(0.0)
-        init_reg0 = var_err.assign(0.0)
-        init_reg1 = var_err.assign(0.0)
-        init_reg2 = var_err.assign(0.0)
+        init_reg0 = var_reg0.assign(0.0)
+        init_reg1 = var_reg1.assign(0.0)
+        init_reg2 = var_reg2.assign(0.0)
         with tf.control_dependencies([init_err, init_reg0, init_reg1, init_reg2]):
             _, sequencer = tf.while_loop(cond=_cond, body=_body, loop_vars=[0, 1.], parallel_iterations=1)
     
@@ -487,6 +487,13 @@ class WkNNFeatureSelector(TransformerMixin):
 
         # create tensorflow graph
         data_type = self.data_type_
+		
+		# conversion of y to numpy
+        y = np.array(y)
+		
+		# if y is 1D, reshape to column
+        if y.ndim == 1:
+            y = y.reshape(-1,1)
         
         # classification flag is automatically set according to number of y columns      
         self.classification = len(y[0]) > 1                   
@@ -586,7 +593,7 @@ class WkNNFeatureSelector(TransformerMixin):
 
             # additional fine-tuning weights
             if not self.apply_weights:
-                return
+                return self
 
             weights = self.weights_
             selected_features = self.selected_features_
@@ -615,6 +622,7 @@ class WkNNFeatureSelector(TransformerMixin):
             self.n_iters_ = n_iters
             self.apply_weights = True
             self.error_ = error
+            return self
                                    
 
     # transforming data by variable selection and/or applying weights
@@ -652,7 +660,7 @@ if __name__ == '__main__':
 
     # loading data
     X = np.loadtxt(path + '/' + dataset_name + '_X.txt', delimiter=delim)
-    y = np.loadtxt(path + '/' + dataset_name + '_y.txt', delimiter=delim).reshape(-1,1)
+    y = np.loadtxt(path + '/' + dataset_name + '_y.txt', delimiter=delim)
             
     # options for initial weights
     m = len(X[0])
