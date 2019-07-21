@@ -662,8 +662,7 @@ if __name__ == '__main__':
     tf.set_random_seed(1)
     
     # path to data
-    #path = 'D:/Users/pBugata/data/madelon'
-    path = 'C:/projects/FS/data/madelon'
+    path = 'D:/Users/pBugata/data/madelon'
     dataset_name = 'madelonHD'
     delim = None
 
