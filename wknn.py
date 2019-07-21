@@ -22,7 +22,7 @@ class WkNNFeatureSelector(TransformerMixin):
                  lambda0 = 0.001, lambda1 = 0.001, lambda2 = 0.001, alpha = 100,
                  optimizer = 'SGD', learning_rate = 0.1, 
                  normalize_gradient = True, data_type = 'float32', scaling = True,
-                 apply_weights = False, n_iters_weights = 300                                 
+                 apply_weights = False, n_iters_weights = 300 , verbose = False                                
         ):
         # this class implements TransformerMixin interface
         TransformerMixin.__init__(self)
@@ -113,6 +113,9 @@ class WkNNFeatureSelector(TransformerMixin):
         
         # number of epochs to fine-tuning weights
         self.n_iters_weights_ = n_iters_weights
+        
+        # debug prints
+        self.verbose = verbose
 
     # pairwise sqeuclidean distance
     def sqeuclidean_dist(self, A, B):  
@@ -525,8 +528,9 @@ class WkNNFeatureSelector(TransformerMixin):
         # don't pre-allocate memory
         config.gpu_options.allow_growth = True
         # create a session with specified option
-        with tf.Session(config=config) as sess:    
-            print('Start')
+        with tf.Session(config=config) as sess:
+            if self.verbose:
+                print('Start')
     
             # global variable initialization
             sess.run(tf.global_variables_initializer())
@@ -538,8 +542,9 @@ class WkNNFeatureSelector(TransformerMixin):
             
             for e in range(steps):
                 try:                
-                    error, reg0, reg1, reg2 = sess.run(optimizer_run)                  
-                    print('Epoch:', (e+1) * self.n_iters_in_loop_, 'error:', error, 'L0 reg:', reg0, 'L1 reg:', reg1, 'L2 reg:', reg2)
+                    error, reg0, reg1, reg2 = sess.run(optimizer_run)
+                    if self.verbose:
+                        print('Epoch:', (e+1) * self.n_iters_in_loop_, 'error:', error, 'L0 reg:', reg0, 'L1 reg:', reg1, 'L2 reg:', reg2)
     
                 except Exception as ex:
                     print('Exception:', ex.__class__, ex.__context__)
@@ -549,7 +554,7 @@ class WkNNFeatureSelector(TransformerMixin):
                     break
                                                            
             # print final error
-            if not end_opt:
+            if not end_opt and self.verbose:
                 if self.lambda0_ != 0 and self.lambda1_ != 0 and self.lambda2_ != 0:   
                     error, reg0, reg1, reg2 = sess.run([cost_op, reg_op0, reg_op1, reg_op2])
                     print('Final:', (e+1) * self.n_iters_in_loop_, 'error:', error, 'L0 reg:', reg0, 'L1 reg:', reg1, 'L2 reg:', reg2)
@@ -585,9 +590,10 @@ class WkNNFeatureSelector(TransformerMixin):
             self.selected_features_ = self.weights_.argsort()[::-1]                         
             nonzero_count = len(self.weights_[self.weights_ > 0])
             
-            print('Non-zero weights: ', nonzero_count)
-            print('Big weights: ', len(self.weights_[self.weights_ > 0.001]))
-            print('Weight sum: ', self.weights_.sum())
+            if self.verbose:
+                print('Non-zero weights: ', nonzero_count)
+                print('Big weights: ', len(self.weights_[self.weights_ > 0.001]))
+                print('Weight sum: ', self.weights_.sum())
             
             self.selected_features_ = self.selected_features_[:min(self.max_features_, nonzero_count)] 
 
@@ -605,16 +611,18 @@ class WkNNFeatureSelector(TransformerMixin):
             self.scl_ = None
             self.apply_weights = False
             X_transformed = X_scl[:,selected_features]
-            print('Selected features: ', selected_features.tolist())            
-            print('Selected weights: ', weights[selected_features].tolist())            
-            print('Selected weights sum: ', weights[selected_features].sum())            
+            if self.verbose:
+                print('Selected features: ', selected_features.tolist())            
+                print('Selected weights: ', weights[selected_features].tolist())            
+                print('Selected weights sum: ', weights[selected_features].sum())            
             self.fit(X_transformed, y, weights[selected_features])
             self.final_selected_features_ = selected_features[self.selected_features_]
             self.final_weights_ = np.zeros(shape=m, dtype=weights.dtype)
             self.final_weights_[self.final_selected_features_] = self.weights_[self.selected_features_]
             self.final_error_ = self.error_
-            print('Final selected features: ', self.final_selected_features_.tolist())            
-            print('Final selected weights: ', self.final_weights_[self.final_selected_features_].tolist())            
+            if self.verbose:
+                print('Final selected features: ', self.final_selected_features_.tolist())            
+                print('Final selected weights: ', self.final_weights_[self.final_selected_features_].tolist())            
                         
             self.weights_ = weights
             self.selected_features_ = selected_features
@@ -654,7 +662,8 @@ if __name__ == '__main__':
     tf.set_random_seed(1)
     
     # path to data
-    path = 'D:/Users/pBugata/data/madelon'
+    #path = 'D:/Users/pBugata/data/madelon'
+    path = 'C:/projects/FS/data/madelon'
     dataset_name = 'madelonHD'
     delim = None
 
@@ -689,15 +698,16 @@ if __name__ == '__main__':
     # scaling - flag for standardization of input data
     # apply_weights - flag for using weights for transformation of entire dataset
     # n_iters_weights - number of iterations for fine-tuning weights
+    # verbose - boolean flag indicating whether print messages
     
     transformer = WkNNFeatureSelector(
-                    max_features = 30, n_iters =10000, n_iters_in_loop = 10, 
+                    max_features = 30, n_iters =10000, n_iters_in_loop = 1000, 
                     metric = 'euclidean', p = 2, kernel = 'exp', 
                     error_type = 'ce', delta = 0.1, 
                     lambda0 = 0.00, lambda1 = 0.00, lambda2 = 0.00, alpha = 100,
                     optimizer = 'SGD', learning_rate = 0.1, 
                     normalize_gradient = True, data_type = 'float64', scaling = True,
-                    apply_weights=False, n_iters_weights=1)                                 
+                    apply_weights = False, n_iters_weights = 1, verbose = False)                                 
 
     t_start = time.time()    
 
